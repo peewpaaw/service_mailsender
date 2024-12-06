@@ -49,7 +49,6 @@ async def on_message(message: aio_pika.IncomingMessage):
             subject = "Test Email"
             to_email = "recipient@example.com"
             body = email_data
-
             # Отправка email
             await send_email(subject, to_email, body)
         except Exception as e:

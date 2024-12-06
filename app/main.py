@@ -1,18 +1,33 @@
 import json
-
-from email_validator import TEST_ENVIRONMENT
-from fastapi import FastAPI, HTTPException, Depends, status
 import aio_pika
-import os
-import asyncio
 
-from pydantic import BaseModel, EmailStr
+from http.client import HTTPException
 
-app = FastAPI()
+from fastapi import FastAPI, APIRouter, Depends
+from fastapi.security import OAuth2PasswordBearer
 
-# Читаем параметры подключения к RabbitMQ из переменных окружения
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq/")
-QUEUE_NAME = "email_queue"
+import settings
+from db.models import ClientApp
+
+from schemas.messages import EmailSchema
+
+from services.auth import authenticate
+
+
+app = FastAPI(title="service mail-sender")
+
+root_router = APIRouter()
+app.include_router(root_router, prefix=settings.API_V1_STR)
+
+
+@app.get("/")
+async def root():
+    return {"message": "Hello World"}
+
+@app.get("/ping/")
+async def ping(client_app: ClientApp = Depends(authenticate)):
+    return client_app
+
 
 # Глобальная переменная для подключения к RabbitMQ
 connection = None
@@ -27,11 +42,10 @@ async def startup_event():
     global connection, channel
     try:
         print("Connecting to RabbitMQ...")
-        print('!!!!!! 1')
-        connection = await aio_pika.connect_robust(RABBITMQ_URL)
+        connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
         channel = await connection.channel()
-        print('!!!!!! 2')
-        await channel.declare_queue(QUEUE_NAME, durable=True)
+
+        await channel.declare_queue(settings.QUEUE_NAME, durable=True)
         print("Connected to RabbitMQ.")
     except Exception as e:
         print(f"Failed to connect to RabbitMQ: {e}")
@@ -49,49 +63,24 @@ async def shutdown_event():
         print("RabbitMQ connection closed.")
 
 
-# Модель данных для email
-class EmailSchema(BaseModel):
-    recipient: EmailStr
-    subject: str
-    body: str
-
-
-TEST_API_KEYS = {"your-api-key-12345"}
-
-def authenticate(api_key: str):
-    if api_key not in TEST_API_KEYS:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API Key",
-        )
-
-
 @app.post("/send-email/")
-async def send_email_message(email: EmailSchema, api_key: str = Depends(authenticate)):
+async def send_email_message(email: EmailSchema, client_app: ClientApp = Depends(authenticate)):
     """
     Публикует сообщение в очередь RabbitMQ.
     """
+    global connection
     message = email.dict()
     message = json.dumps(message)
-
     try:
-        print(f"Publishing message to queue {QUEUE_NAME}: {message}")
+        print(f"Publishing message to queue {settings.QUEUE_NAME}: {message}")
         await channel.default_exchange.publish(
             aio_pika.Message(
                 body=message.encode(),
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT,  # Сообщения будут сохранены на диске
             ),
-            routing_key=QUEUE_NAME,
+            routing_key=settings.QUEUE_NAME,
         )
         return {"status": "success", "message": "Message published to RabbitMQ"}
     except Exception as e:
         print(f"Failed to publish message: {e}")
         raise HTTPException(status_code=500, detail="Failed to publish message")
-
-
-@app.get("/")
-async def read_root():
-    """
-    Тестовый маршрут для проверки работы сервера.
-    """
-    return {"message": "RabbitMQ Publisher is running."}
