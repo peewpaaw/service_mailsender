@@ -4,7 +4,6 @@ import aio_pika
 from http.client import HTTPException
 
 from fastapi import FastAPI, APIRouter, Depends
-from fastapi.security import OAuth2PasswordBearer
 
 import settings
 from db.models import ClientApp
@@ -42,10 +41,14 @@ async def startup_event():
     global connection, channel
     try:
         print("Connecting to RabbitMQ...")
+        print("!!!: ", settings.RABBITMQ_URL)
         connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
+        print("CHANNEL !!!")
         channel = await connection.channel()
 
+        print("QUEUE !!!")
         await channel.declare_queue(settings.QUEUE_NAME, durable=True)
+
         print("Connected to RabbitMQ.")
     except Exception as e:
         print(f"Failed to connect to RabbitMQ: {e}")

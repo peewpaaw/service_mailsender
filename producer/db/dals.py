@@ -27,5 +27,4 @@ class ClientAppDAL:
         query = select(ClientApp)
         res = await self.db_session.execute(query)
         client_apps = res.scalars().all()
-        if client_apps:
-            return client_apps
+        return client_apps

@@ -5,10 +5,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-RABBITMQ_URL=os.getenv("RABBITMQ_URL")
+RABBITMQ_URL=os.getenv(
+    "RABBITMQ_URL",
+    default="amqp://guest:guest@localhost/",
+)
+print("settings,rabbitmq_url: ", RABBITMQ_URL)
 
 QUEUE_NAME=os.getenv("QUEUE_NAME")
 
